@@ -1,4 +1,3 @@
-// Stripped of all Firebase Auth dependencies. Triple-click provides instant CMS access.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getFirestore, doc, setDoc, collection, onSnapshot, query, orderBy, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
@@ -13,7 +12,7 @@ const firebaseConfig = {
 };
 
 const CLOUDINARY_CLOUD_NAME = "ykfzqvzs"; 
-const CLOUDINARY_PRESET = "pphone"; 
+const CLOUDINARY_PRESET = "photo_drop"; 
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -33,18 +32,22 @@ const closeViewerBtn = document.getElementById('close-viewer-btn');
 const secretTrigger = document.getElementById('secret-trigger');
 const cmsModal = document.getElementById('cms-modal');
 const closeCmsBtn = document.getElementById('close-cms');
+const cmsInputs = document.getElementById('cms-inputs');
+const uploadProgressView = document.getElementById('upload-progress-view');
+const uploadLog = document.getElementById('upload-log');
+const finishUploadBtn = document.getElementById('finish-upload-btn');
+
 const fileInput = document.getElementById('image-upload');
 const creditsListUl = document.getElementById('credits-list');
 const creditsInput = document.getElementById('credits-input');
 const saveCreditsBtn = document.getElementById('save-credits-btn');
 const galleryContainer = document.getElementById('gallery-container');
-const uploadStatus = document.getElementById('upload-status');
 
 let imagesData = [];
 let creditsData = ['Saditha Sulakshana (PGS)'];
 let hasSeenOnboarding = false;
 
-// Toast Utility
+// --- UTILITIES ---
 function showToast(msg) {
   const c = document.getElementById("toastContainer");
   const t = document.createElement("div");
@@ -54,18 +57,24 @@ function showToast(msg) {
   setTimeout(() => t.remove(), 4000);
 }
 
+function appendLog(msg, type = "info") {
+  const line = document.createElement('div');
+  line.className = `log-line log-${type}`;
+  line.textContent = `> ${msg}`;
+  uploadLog.appendChild(line);
+  uploadLog.scrollTop = uploadLog.scrollHeight;
+}
+
 // --- REAL-TIME FIRESTORE LISTENERS ---
-// 1. Listen for Credits
 onSnapshot(doc(db, "gallery_config", "credits"), (snap) => {
   if (snap.exists() && snap.data().list) {
     creditsData = snap.data().list;
     renderCredits();
   } else {
-    renderCredits(); // Renders defaults if DB is empty
+    renderCredits(); 
   }
 });
 
-// 2. Listen for Photos
 onSnapshot(query(collection(db, "gallery_photos"), orderBy("timestamp", "asc")), (snap) => {
   imagesData = [];
   snap.forEach(docSnap => {
@@ -87,7 +96,7 @@ function renderCredits() {
   });
 }
 
-// --- NAVIGATION ---
+// --- NAVIGATION (FIXED VIEW ROUTING) ---
 viewBtn.addEventListener('click', async () => {
   landingPage.classList.remove('active');
   
@@ -95,13 +104,11 @@ viewBtn.addEventListener('click', async () => {
     galleryPage.classList.add('active');
     renderGallery(); 
   } else {
-    loadingScreen.classList.remove('hidden');
     loadingScreen.classList.add('active');
     
     await preloadImages(imagesData.map(img => img.url));
     
     loadingScreen.classList.remove('active');
-    loadingScreen.classList.add('hidden');
     galleryPage.classList.add('active');
     renderGallery();
     buildFullscreenViewer();
@@ -127,7 +134,6 @@ function preloadImages(urls) {
 // --- SECRET TRIPLE-CLICK CMS ---
 let clickCount = 0;
 let clickTimer;
-
 secretTrigger.addEventListener('click', () => {
   clickCount++;
   if (clickCount === 1) {
@@ -135,14 +141,10 @@ secretTrigger.addEventListener('click', () => {
   } else if (clickCount === 3) {
     clearTimeout(clickTimer);
     clickCount = 0;
-    openCmsModal(); // Instantly bypasses auth
+    creditsInput.value = creditsData.join(', ');
+    cmsModal.classList.remove('hidden'); 
   }
 });
-
-function openCmsModal() {
-  creditsInput.value = creditsData.join(', ');
-  cmsModal.classList.remove('hidden');
-}
 
 closeCmsBtn.addEventListener('click', () => cmsModal.classList.add('hidden'));
 
@@ -150,63 +152,114 @@ closeCmsBtn.addEventListener('click', () => cmsModal.classList.add('hidden'));
 saveCreditsBtn.addEventListener('click', async () => {
   const rawText = creditsInput.value;
   creditsData = rawText.split(',').map(s => s.trim()).filter(s => s !== "");
-  
   try {
     await setDoc(doc(db, "gallery_config", "credits"), { list: creditsData });
     showToast("Credits Updated!");
-  } catch(e) {
-    showToast("Failed to save credits.");
-  }
+  } catch(e) { showToast("Failed to save credits."); }
 });
 
-// --- CMS: UPLOAD IMAGE ---
+// --- CMS: UPLOAD IMAGE (WITH TERMINAL LOG & TIMEOUT) ---
 fileInput.addEventListener('change', async (e) => {
   const files = e.target.files;
   if (!files.length) return;
 
-  uploadStatus.textContent = "Uploading assets...";
+  cmsInputs.classList.add('hidden');
+  uploadProgressView.classList.remove('hidden');
+  finishUploadBtn.classList.add('hidden');
+  uploadLog.innerHTML = '';
+  
+  appendLog(`Initializing batch upload for ${files.length} asset(s)...`, 'info');
 
-  for (let file of files) {
+  for (let i = 0; i < files.length; i++) {
+    let file = files[i];
     let dateTaken = new Date();
+    
+    appendLog(`[Asset ${i+1}/${files.length}] Scanning metadata structure...`, 'info');
+    
     try {
-      const exifData = await exifr.parse(file);
+      const exifPromise = exifr.parse(file);
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2500));
+      
+      const exifData = await Promise.race([exifPromise, timeoutPromise]);
+      
       if (exifData && exifData.DateTimeOriginal) {
         dateTaken = new Date(exifData.DateTimeOriginal);
-      } else if (file.lastModified) {
+        appendLog(`[Asset ${i+1}] Chronological timestamp verified.`, 'success');
+      } else {
         dateTaken = new Date(file.lastModified);
+        appendLog(`[Asset ${i+1}] No embedded capture time. Defaulting to modification date.`, 'info');
       }
     } catch (err) {
-      console.log("No EXIF data.");
+      dateTaken = new Date(file.lastModified);
+      appendLog(`[Asset ${i+1}] Metadata read timeout. Reverting to modification date.`, 'error');
     }
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_PRESET);
+    appendLog(`[Asset ${i+1}] Preparing Cloudinary pipeline...`, 'info');
 
-    try {
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
-        method: 'POST', 
-        body: formData
-      });
-      const data = await res.json();
+    await new Promise((resolve, reject) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('upload_preset', CLOUDINARY_PRESET);
 
-      if (data.secure_url) {
-        await addDoc(collection(db, "gallery_photos"), {
-          url: data.secure_url,
-          timestamp: dateTaken.getTime(),
-          hourLabel: formatHourAMPM(dateTaken),
-          createdAt: serverTimestamp()
-        });
-      }
-    } catch (error) {
-      console.error("Upload failed", error);
-    }
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`);
+      
+      let lastLoggedPercent = 0;
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const p = Math.round((event.loaded / event.total) * 100);
+          if (p >= lastLoggedPercent + 20 || p === 100) {
+            appendLog(`[Asset ${i+1}] Uploading packet... ${p}%`, 'info');
+            lastLoggedPercent = p;
+          }
+        }
+      };
+
+      xhr.onload = async () => {
+        if (xhr.status === 200) {
+          const data = JSON.parse(xhr.responseText);
+          if (data.secure_url) {
+            appendLog(`[Asset ${i+1}] Cloud transfer complete. Registering to Firestore database...`, 'info');
+            try {
+              await addDoc(collection(db, "gallery_photos"), {
+                url: data.secure_url,
+                timestamp: dateTaken.getTime(),
+                hourLabel: formatHourAMPM(dateTaken),
+                createdAt: serverTimestamp()
+              });
+              appendLog(`[Asset ${i+1}] Indexing complete for sequential downloads.`, 'success');
+              resolve();
+            } catch(dbErr) {
+              appendLog(`[Asset ${i+1}] Database registration rejected.`, 'error');
+              reject();
+            }
+          }
+        } else {
+          appendLog(`[Asset ${i+1}] Cloud transfer failed.`, 'error');
+          reject();
+        }
+      };
+      
+      xhr.onerror = () => {
+        appendLog(`[Asset ${i+1}] Network timeout.`, 'error');
+        reject();
+      };
+      
+      xhr.send(fd);
+    });
+    
+    appendLog(`-----------------------------------`, 'info');
   }
 
-  uploadStatus.textContent = "";
-  showToast("Upload Complete!");
-  cmsModal.classList.add('hidden');
+  appendLog(`All assets processed. Batch upload closed.`, 'success');
+  finishUploadBtn.classList.remove('hidden');
   fileInput.value = "";
+});
+
+finishUploadBtn.addEventListener('click', () => {
+  cmsModal.classList.add('hidden');
+  cmsInputs.classList.remove('hidden');
+  uploadProgressView.classList.add('hidden');
 });
 
 function formatHourAMPM(date) {
