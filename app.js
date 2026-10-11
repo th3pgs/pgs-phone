@@ -12,7 +12,7 @@ const firebaseConfig = {
 };
 
 const CLOUDINARY_CLOUD_NAME = "ykfzqvzs"; 
-const CLOUDINARY_PRESET = "photo_drop"; 
+const CLOUDINARY_PRESET = "pphone"; 
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -74,7 +74,6 @@ function appendLog(msg, type = "info") {
   uploadLog.scrollTop = uploadLog.scrollHeight;
 }
 
-// Converts high-res Cloudinary URL into a lightweight 300px thumbnail instantly
 function getCloudinaryThumb(url) {
   return url.replace('/upload/', '/upload/c_scale,w_300,q_auto,f_auto/');
 }
@@ -113,7 +112,7 @@ function renderCredits() {
   });
 }
 
-// --- NAVIGATION (INSTANT LOAD, NO PRELOAD BLOCKING) ---
+// --- NAVIGATION ---
 viewBtn.addEventListener('click', () => {
   landingPage.classList.remove('active');
   galleryPage.classList.add('active');
@@ -156,14 +155,20 @@ tabManage.addEventListener('click', () => {
   renderCmsAssetGrid();
 });
 
-// --- CMS: DELETE ASSETS ---
+// --- CMS: ASSET MANAGER & DELETION (FIXED RACE CONDITION) ---
 function renderCmsAssetGrid() {
   assetGrid.innerHTML = '';
-  selectedForDeletion.clear();
   
+  // Note: We no longer clear `selectedForDeletion` here so live updates don't wipe your selections.
   imagesData.forEach(img => {
     const item = document.createElement('div');
     item.className = 'asset-item';
+    
+    // Re-apply highlight if this item was already selected
+    if (selectedForDeletion.has(img.id)) {
+      item.classList.add('selected');
+    }
+    
     item.innerHTML = `<img src="${getCloudinaryThumb(img.url)}" loading="lazy">`;
     
     item.addEventListener('click', () => {
@@ -197,7 +202,11 @@ deleteSelectedBtn.addEventListener('click', async () => {
   const originalText = deleteSelectedBtn.textContent;
   deleteSelectedBtn.textContent = 'Deleting...';
   
-  for (let id of selectedForDeletion) {
+  // Lock the selected IDs into a hard array before we start deleting
+  // This prevents the real-time listener from cutting the loop off midway.
+  const idsToDelete = Array.from(selectedForDeletion);
+  
+  for (let id of idsToDelete) {
     try {
       await deleteDoc(doc(db, "gallery_photos", id));
     } catch(e) {
@@ -207,7 +216,8 @@ deleteSelectedBtn.addEventListener('click', async () => {
   
   showToast("Assets removed from gallery.");
   deleteSelectedBtn.textContent = originalText;
-  selectedForDeletion.clear();
+  selectedForDeletion.clear(); // Safe to wipe the memory block now
+  renderCmsAssetGrid(); 
 });
 
 // --- CMS: SAVE CREDITS ---
@@ -340,7 +350,6 @@ function renderGallery() {
     images.forEach(img => {
       const card = document.createElement('div');
       card.className = 'image-card';
-      // Load optimized Cloudinary thumbnail instead of full image
       card.innerHTML = `<img src="${getCloudinaryThumb(img.url)}" loading="lazy" alt="Event photo">`;
       card.addEventListener('click', () => openFullscreenViewer(img.globalIndex));
       grid.appendChild(card);
@@ -359,7 +368,6 @@ function buildFullscreenViewer() {
     slide.className = 'scroll-slide';
     slide.id = `slide-${index}`;
     
-    // Viewer keeps the high-resolution source URL
     slide.innerHTML = `
       <img src="${img.url}" loading="lazy" alt="Event photo">
       <button class="download-action" onclick="forceDownload('${img.url}', ${index + 1})">↓ Save Image</button>
