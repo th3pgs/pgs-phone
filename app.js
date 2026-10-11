@@ -12,7 +12,7 @@ const firebaseConfig = {
 };
 
 const CLOUDINARY_CLOUD_NAME = "ykfzqvzs"; 
-const CLOUDINARY_PRESET = "photo_drop"; 
+const CLOUDINARY_PRESET = "pphone"; 
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
