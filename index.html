@@ -32,37 +32,62 @@
   <div id="loading-screen" class="view-section">
     <div class="loader-content">
       <div class="spinner"></div>
-      <p>Syncing gallery...</p>
+      <p>Loading...</p>
     </div>
   </div>
 
   <!-- SECRET CMS / UPLOAD MODAL -->
   <div id="cms-modal" class="hidden">
-    <div class="modal-box">
+    <div class="modal-box cms-scrollable">
       
       <div id="cms-inputs">
         <h2>Gallery Management</h2>
-        <div class="cms-section">
-          <h3>Update Photographer Credits</h3>
-          <textarea id="credits-input" rows="2" placeholder="Names separated by commas..."></textarea>
-          <button id="save-credits-btn" class="high-contrast-btn outline small-btn">Save Credits</button>
+        
+        <!-- CMS Tabs -->
+        <div class="cms-tabs">
+          <button id="tab-upload" class="cms-tab active">Upload</button>
+          <button id="tab-manage" class="cms-tab">Manage Assets</button>
         </div>
 
-        <div class="cms-section">
-          <h3>Upload Images</h3>
-          <div class="file-dropzone" onclick="document.getElementById('image-upload').click()">
-            <input type="file" id="image-upload" multiple accept="image/*" style="display:none;">
-            <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            <p style="margin-top: 10px; font-weight: 600;">Tap to select high-res photos</p>
+        <div id="view-upload" class="cms-view active">
+          <div class="cms-section">
+            <h3>Update Photographer Credits</h3>
+            <textarea id="credits-input" rows="2" placeholder="Names separated by commas..."></textarea>
+            <button id="save-credits-btn" class="high-contrast-btn outline small-btn">Save Credits</button>
+          </div>
+
+          <div class="cms-section">
+            <h3>Upload Images</h3>
+            <div class="file-dropzone" onclick="document.getElementById('image-upload').click()">
+              <input type="file" id="image-upload" multiple accept="image/*" style="display:none;">
+              <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <p style="margin-top: 10px; font-weight: 600;">Tap to select high-res photos</p>
+            </div>
           </div>
         </div>
+
+        <div id="view-manage" class="cms-view">
+          <div class="cms-section">
+            <div class="manage-header">
+              <h3>Delete Assets</h3>
+              <div class="manage-actions">
+                <button id="select-all-btn" class="small-btn outline">Select All</button>
+                <button id="delete-selected-btn" class="small-btn danger">Delete Selected</button>
+              </div>
+            </div>
+            <div id="cms-asset-grid" class="asset-mini-grid">
+              <!-- Asset thumbnails load here -->
+            </div>
+          </div>
+        </div>
+
         <button id="close-cms" class="high-contrast-btn outline" style="width: 100%;">Close CMS</button>
       </div>
 
       <div id="upload-progress-view" class="hidden">
         <h2>Processing Assets</h2>
         <div id="upload-log" class="terminal-log"></div>
-        <button id="finish-upload-btn" class="high-contrast-btn hidden" style="width: 100%; margin-top: 20px;">Return to Gallery</button>
+        <button id="finish-upload-btn" class="high-contrast-btn hidden" style="width: 100%; margin-top: 20px;">Return</button>
       </div>
 
     </div>
@@ -80,10 +105,17 @@
   <!-- FULLSCREEN TIKTOK-STYLE VIEWER -->
   <div id="fullscreen-viewer" class="hidden">
     <button id="close-viewer-btn" class="viewer-close">✕</button>
+    
     <div id="scroll-onboarding" class="hidden">
-      <div class="swipe-icon"></div>
-      <p>Swipe to explore</p>
+      <div class="swipe-icon">
+        <svg viewBox="0 0 24 24" width="32" height="32" stroke="#fff" stroke-width="2" fill="none"><polyline points="7 13 12 18 17 13"></polyline><polyline points="7 6 12 11 17 6"></polyline></svg>
+      </div>
+      <p>Swipe vertically to explore</p>
     </div>
+
+    <!-- Persistent visual scroll hint -->
+    <div class="scroll-indicator">↓</div>
+
     <div id="scroll-container"></div>
   </div>
 

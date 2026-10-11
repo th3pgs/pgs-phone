@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-import { getFirestore, doc, setDoc, collection, onSnapshot, query, orderBy, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, deleteDoc, collection, onSnapshot, query, orderBy, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
 // --- CONFIGURATION ---
 const firebaseConfig = {
@@ -12,7 +12,7 @@ const firebaseConfig = {
 };
 
 const CLOUDINARY_CLOUD_NAME = "ykfzqvzs"; 
-const CLOUDINARY_PRESET = "pphone"; 
+const CLOUDINARY_PRESET = "photo_drop"; 
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
@@ -37,6 +37,14 @@ const uploadProgressView = document.getElementById('upload-progress-view');
 const uploadLog = document.getElementById('upload-log');
 const finishUploadBtn = document.getElementById('finish-upload-btn');
 
+const tabUpload = document.getElementById('tab-upload');
+const tabManage = document.getElementById('tab-manage');
+const viewUpload = document.getElementById('view-upload');
+const viewManage = document.getElementById('view-manage');
+const assetGrid = document.getElementById('cms-asset-grid');
+const selectAllBtn = document.getElementById('select-all-btn');
+const deleteSelectedBtn = document.getElementById('delete-selected-btn');
+
 const fileInput = document.getElementById('image-upload');
 const creditsListUl = document.getElementById('credits-list');
 const creditsInput = document.getElementById('credits-input');
@@ -46,6 +54,7 @@ const galleryContainer = document.getElementById('gallery-container');
 let imagesData = [];
 let creditsData = ['Saditha Sulakshana (PGS)'];
 let hasSeenOnboarding = false;
+let selectedForDeletion = new Set();
 
 // --- UTILITIES ---
 function showToast(msg) {
@@ -63,6 +72,11 @@ function appendLog(msg, type = "info") {
   line.textContent = `> ${msg}`;
   uploadLog.appendChild(line);
   uploadLog.scrollTop = uploadLog.scrollHeight;
+}
+
+// Converts high-res Cloudinary URL into a lightweight 300px thumbnail instantly
+function getCloudinaryThumb(url) {
+  return url.replace('/upload/', '/upload/c_scale,w_300,q_auto,f_auto/');
 }
 
 // --- REAL-TIME FIRESTORE LISTENERS ---
@@ -85,6 +99,9 @@ onSnapshot(query(collection(db, "gallery_photos"), orderBy("timestamp", "asc")),
     renderGallery();
     buildFullscreenViewer();
   }
+  if (cmsModal.classList.contains('hidden') === false && viewManage.classList.contains('active')) {
+    renderCmsAssetGrid();
+  }
 });
 
 function renderCredits() {
@@ -96,23 +113,12 @@ function renderCredits() {
   });
 }
 
-// --- NAVIGATION (FIXED VIEW ROUTING) ---
-viewBtn.addEventListener('click', async () => {
+// --- NAVIGATION (INSTANT LOAD, NO PRELOAD BLOCKING) ---
+viewBtn.addEventListener('click', () => {
   landingPage.classList.remove('active');
-  
-  if (imagesData.length === 0) {
-    galleryPage.classList.add('active');
-    renderGallery(); 
-  } else {
-    loadingScreen.classList.add('active');
-    
-    await preloadImages(imagesData.map(img => img.url));
-    
-    loadingScreen.classList.remove('active');
-    galleryPage.classList.add('active');
-    renderGallery();
-    buildFullscreenViewer();
-  }
+  galleryPage.classList.add('active');
+  renderGallery(); 
+  buildFullscreenViewer();
 });
 
 backBtn.addEventListener('click', () => {
@@ -120,18 +126,8 @@ backBtn.addEventListener('click', () => {
   landingPage.classList.add('active');
 });
 
-function preloadImages(urls) {
-  return Promise.all(urls.map(url => {
-    return new Promise(resolve => {
-      const img = new Image();
-      img.src = url;
-      img.onload = resolve;
-      img.onerror = resolve; 
-    });
-  }));
-}
 
-// --- SECRET TRIPLE-CLICK CMS ---
+// --- SECRET TRIPLE-CLICK CMS & TABS ---
 let clickCount = 0;
 let clickTimer;
 secretTrigger.addEventListener('click', () => {
@@ -143,10 +139,76 @@ secretTrigger.addEventListener('click', () => {
     clickCount = 0;
     creditsInput.value = creditsData.join(', ');
     cmsModal.classList.remove('hidden'); 
+    renderCmsAssetGrid();
   }
 });
 
 closeCmsBtn.addEventListener('click', () => cmsModal.classList.add('hidden'));
+
+tabUpload.addEventListener('click', () => {
+  tabUpload.classList.add('active'); tabManage.classList.remove('active');
+  viewUpload.classList.add('active'); viewManage.classList.remove('active');
+});
+
+tabManage.addEventListener('click', () => {
+  tabManage.classList.add('active'); tabUpload.classList.remove('active');
+  viewManage.classList.add('active'); viewUpload.classList.remove('active');
+  renderCmsAssetGrid();
+});
+
+// --- CMS: DELETE ASSETS ---
+function renderCmsAssetGrid() {
+  assetGrid.innerHTML = '';
+  selectedForDeletion.clear();
+  
+  imagesData.forEach(img => {
+    const item = document.createElement('div');
+    item.className = 'asset-item';
+    item.innerHTML = `<img src="${getCloudinaryThumb(img.url)}" loading="lazy">`;
+    
+    item.addEventListener('click', () => {
+      if (selectedForDeletion.has(img.id)) {
+        selectedForDeletion.delete(img.id);
+        item.classList.remove('selected');
+      } else {
+        selectedForDeletion.add(img.id);
+        item.classList.add('selected');
+      }
+    });
+    assetGrid.appendChild(item);
+  });
+}
+
+selectAllBtn.addEventListener('click', () => {
+  const items = document.querySelectorAll('.asset-item');
+  if (selectedForDeletion.size === imagesData.length) {
+    selectedForDeletion.clear();
+    items.forEach(item => item.classList.remove('selected'));
+  } else {
+    imagesData.forEach(img => selectedForDeletion.add(img.id));
+    items.forEach(item => item.classList.add('selected'));
+  }
+});
+
+deleteSelectedBtn.addEventListener('click', async () => {
+  if (selectedForDeletion.size === 0) return;
+  if (!confirm(`Delete ${selectedForDeletion.size} asset(s) from the gallery?`)) return;
+
+  const originalText = deleteSelectedBtn.textContent;
+  deleteSelectedBtn.textContent = 'Deleting...';
+  
+  for (let id of selectedForDeletion) {
+    try {
+      await deleteDoc(doc(db, "gallery_photos", id));
+    } catch(e) {
+      console.error("Failed to delete", id);
+    }
+  }
+  
+  showToast("Assets removed from gallery.");
+  deleteSelectedBtn.textContent = originalText;
+  selectedForDeletion.clear();
+});
 
 // --- CMS: SAVE CREDITS ---
 saveCreditsBtn.addEventListener('click', async () => {
@@ -158,7 +220,7 @@ saveCreditsBtn.addEventListener('click', async () => {
   } catch(e) { showToast("Failed to save credits."); }
 });
 
-// --- CMS: UPLOAD IMAGE (WITH TERMINAL LOG & TIMEOUT) ---
+// --- CMS: UPLOAD IMAGE (TERMINAL LOG) ---
 fileInput.addEventListener('change', async (e) => {
   const files = e.target.files;
   if (!files.length) return;
@@ -174,27 +236,16 @@ fileInput.addEventListener('change', async (e) => {
     let file = files[i];
     let dateTaken = new Date();
     
-    appendLog(`[Asset ${i+1}/${files.length}] Scanning metadata structure...`, 'info');
-    
+    appendLog(`[Asset ${i+1}/${files.length}] Scanning metadata...`, 'info');
     try {
       const exifPromise = exifr.parse(file);
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2500));
-      
       const exifData = await Promise.race([exifPromise, timeoutPromise]);
-      
-      if (exifData && exifData.DateTimeOriginal) {
-        dateTaken = new Date(exifData.DateTimeOriginal);
-        appendLog(`[Asset ${i+1}] Chronological timestamp verified.`, 'success');
-      } else {
-        dateTaken = new Date(file.lastModified);
-        appendLog(`[Asset ${i+1}] No embedded capture time. Defaulting to modification date.`, 'info');
-      }
+      if (exifData && exifData.DateTimeOriginal) { dateTaken = new Date(exifData.DateTimeOriginal); } 
+      else { dateTaken = new Date(file.lastModified); }
     } catch (err) {
       dateTaken = new Date(file.lastModified);
-      appendLog(`[Asset ${i+1}] Metadata read timeout. Reverting to modification date.`, 'error');
     }
-
-    appendLog(`[Asset ${i+1}] Preparing Cloudinary pipeline...`, 'info');
 
     await new Promise((resolve, reject) => {
       const fd = new FormData();
@@ -219,7 +270,7 @@ fileInput.addEventListener('change', async (e) => {
         if (xhr.status === 200) {
           const data = JSON.parse(xhr.responseText);
           if (data.secure_url) {
-            appendLog(`[Asset ${i+1}] Cloud transfer complete. Registering to Firestore database...`, 'info');
+            appendLog(`[Asset ${i+1}] Cloud transfer complete. Registering DB...`, 'info');
             try {
               await addDoc(collection(db, "gallery_photos"), {
                 url: data.secure_url,
@@ -227,28 +278,15 @@ fileInput.addEventListener('change', async (e) => {
                 hourLabel: formatHourAMPM(dateTaken),
                 createdAt: serverTimestamp()
               });
-              appendLog(`[Asset ${i+1}] Indexing complete for sequential downloads.`, 'success');
+              appendLog(`[Asset ${i+1}] Indexing complete.`, 'success');
               resolve();
-            } catch(dbErr) {
-              appendLog(`[Asset ${i+1}] Database registration rejected.`, 'error');
-              reject();
-            }
+            } catch(dbErr) { reject(); }
           }
-        } else {
-          appendLog(`[Asset ${i+1}] Cloud transfer failed.`, 'error');
-          reject();
-        }
+        } else { reject(); }
       };
-      
-      xhr.onerror = () => {
-        appendLog(`[Asset ${i+1}] Network timeout.`, 'error');
-        reject();
-      };
-      
+      xhr.onerror = () => reject();
       xhr.send(fd);
     });
-    
-    appendLog(`-----------------------------------`, 'info');
   }
 
   appendLog(`All assets processed. Batch upload closed.`, 'success');
@@ -269,7 +307,7 @@ function formatHourAMPM(date) {
   return `${hours} ${ampm}`;
 }
 
-// --- RENDER GRID ---
+// --- RENDER GRID WITH THUMBNAILS ---
 function renderGallery() {
   galleryContainer.innerHTML = '';
   
@@ -302,7 +340,8 @@ function renderGallery() {
     images.forEach(img => {
       const card = document.createElement('div');
       card.className = 'image-card';
-      card.innerHTML = `<img src="${img.url}" loading="lazy" alt="Event photo">`;
+      // Load optimized Cloudinary thumbnail instead of full image
+      card.innerHTML = `<img src="${getCloudinaryThumb(img.url)}" loading="lazy" alt="Event photo">`;
       card.addEventListener('click', () => openFullscreenViewer(img.globalIndex));
       grid.appendChild(card);
     });
@@ -320,8 +359,9 @@ function buildFullscreenViewer() {
     slide.className = 'scroll-slide';
     slide.id = `slide-${index}`;
     
+    // Viewer keeps the high-resolution source URL
     slide.innerHTML = `
-      <img src="${img.url}" alt="Event photo">
+      <img src="${img.url}" loading="lazy" alt="Event photo">
       <button class="download-action" onclick="forceDownload('${img.url}', ${index + 1})">↓ Save Image</button>
     `;
     scrollContainer.appendChild(slide);
@@ -333,9 +373,8 @@ function openFullscreenViewer(index) {
   
   if (!hasSeenOnboarding) {
     scrollOnboarding.classList.remove('hidden');
+    setTimeout(() => scrollOnboarding.classList.add('hidden'), 3000);
     hasSeenOnboarding = true;
-  } else {
-    scrollOnboarding.classList.add('hidden');
   }
 
   const targetSlide = document.getElementById(`slide-${index}`);
@@ -348,7 +387,7 @@ closeViewerBtn.addEventListener('click', () => {
   fullscreenViewer.classList.add('hidden');
 });
 
-// --- FORCE DOWNLOAD WITH RENAME BY NUMBER ---
+// --- FORCE DOWNLOAD ---
 window.forceDownload = async function(url, numberIndex) {
   try {
     showToast("Preparing download...");
