@@ -125,7 +125,6 @@ backBtn.addEventListener('click', () => {
   landingPage.classList.add('active');
 });
 
-
 // --- SECRET TRIPLE-CLICK CMS & TABS ---
 let clickCount = 0;
 let clickTimer;
@@ -155,16 +154,14 @@ tabManage.addEventListener('click', () => {
   renderCmsAssetGrid();
 });
 
-// --- CMS: ASSET MANAGER & DELETION (FIXED RACE CONDITION) ---
+// --- CMS: ASSET MANAGER & DELETION ---
 function renderCmsAssetGrid() {
   assetGrid.innerHTML = '';
   
-  // Note: We no longer clear `selectedForDeletion` here so live updates don't wipe your selections.
   imagesData.forEach(img => {
     const item = document.createElement('div');
     item.className = 'asset-item';
     
-    // Re-apply highlight if this item was already selected
     if (selectedForDeletion.has(img.id)) {
       item.classList.add('selected');
     }
@@ -202,8 +199,6 @@ deleteSelectedBtn.addEventListener('click', async () => {
   const originalText = deleteSelectedBtn.textContent;
   deleteSelectedBtn.textContent = 'Deleting...';
   
-  // Lock the selected IDs into a hard array before we start deleting
-  // This prevents the real-time listener from cutting the loop off midway.
   const idsToDelete = Array.from(selectedForDeletion);
   
   for (let id of idsToDelete) {
@@ -216,7 +211,7 @@ deleteSelectedBtn.addEventListener('click', async () => {
   
   showToast("Assets removed from gallery.");
   deleteSelectedBtn.textContent = originalText;
-  selectedForDeletion.clear(); // Safe to wipe the memory block now
+  selectedForDeletion.clear(); 
   renderCmsAssetGrid(); 
 });
 
@@ -368,9 +363,10 @@ function buildFullscreenViewer() {
     slide.className = 'scroll-slide';
     slide.id = `slide-${index}`;
     
+    // Removed loading="lazy" to ensure images buffer perfectly when scrolling
     slide.innerHTML = `
-      <img src="${img.url}" loading="lazy" alt="Event photo">
-      <button class="download-action" onclick="forceDownload('${img.url}', ${index + 1})">↓ Save Image</button>
+      <img src="${img.url}" alt="Event photo">
+      <button class="download-action" onclick="forceDownload('${img.url}', ${index + 1})">Download</button>
     `;
     scrollContainer.appendChild(slide);
   });
