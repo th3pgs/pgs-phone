@@ -1,3 +1,4 @@
+// Stripped of all Firebase Auth dependencies. Triple-click provides instant CMS access.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getFirestore, doc, setDoc, collection, onSnapshot, query, orderBy, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
@@ -59,10 +60,12 @@ onSnapshot(doc(db, "gallery_config", "credits"), (snap) => {
   if (snap.exists() && snap.data().list) {
     creditsData = snap.data().list;
     renderCredits();
+  } else {
+    renderCredits(); // Renders defaults if DB is empty
   }
 });
 
-// 2. Listen for Photos (Bypasses all static Cloudflare caching)
+// 2. Listen for Photos
 onSnapshot(query(collection(db, "gallery_photos"), orderBy("timestamp", "asc")), (snap) => {
   imagesData = [];
   snap.forEach(docSnap => {
@@ -132,9 +135,7 @@ secretTrigger.addEventListener('click', () => {
   } else if (clickCount === 3) {
     clearTimeout(clickTimer);
     clickCount = 0;
-    
-    // Instantly open CMS without authentication
-    openCmsModal();
+    openCmsModal(); // Instantly bypasses auth
   }
 });
 
