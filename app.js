@@ -1,6 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getFirestore, doc, setDoc, collection, onSnapshot, query, orderBy, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 
 // --- CONFIGURATION ---
 const firebaseConfig = {
@@ -13,15 +12,12 @@ const firebaseConfig = {
 };
 
 const CLOUDINARY_CLOUD_NAME = "ykfzqvzs"; 
-const CLOUDINARY_PRESET = "photo_drop"; // Replace with your new Cloudinary preset name if changed
-const ADMIN_EMAIL = "undercoverhaein@gmail.com";
+const CLOUDINARY_PRESET = "pphone"; 
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
-const provider = new GoogleAuthProvider();
 
-// DOM Elements
+// --- DOM ELEMENTS ---
 const landingPage = document.getElementById('landing-page');
 const galleryPage = document.getElementById('gallery-page');
 const loadingScreen = document.getElementById('loading-screen');
@@ -45,12 +41,7 @@ const uploadStatus = document.getElementById('upload-status');
 
 let imagesData = [];
 let creditsData = ['Saditha Sulakshana (PGS)'];
-let cachedAdmin = false;
 let hasSeenOnboarding = false;
-
-onAuthStateChanged(auth, (user) => { 
-  if (user && user.email === ADMIN_EMAIL) cachedAdmin = true; 
-});
 
 // Toast Utility
 function showToast(msg) {
@@ -142,18 +133,8 @@ secretTrigger.addEventListener('click', () => {
     clearTimeout(clickTimer);
     clickCount = 0;
     
-    if (cachedAdmin) {
-      openCmsModal();
-    } else {
-      signInWithPopup(auth, provider).then((res) => {
-        if (res.user.email === ADMIN_EMAIL) {
-          cachedAdmin = true;
-          openCmsModal();
-        } else {
-          showToast("Access Denied.");
-        }
-      }).catch(() => showToast("Authentication failed."));
-    }
+    // Instantly open CMS without authentication
+    openCmsModal();
   }
 });
 
